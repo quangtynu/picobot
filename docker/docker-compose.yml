@@ -1,0 +1,19 @@
+services:
+  picobot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: picobot
+    restart: unless-stopped
+    environment:
+      # Required: Your OpenRouter API key
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-sk-or-v1-REPLACE_ME}
+      # Required: The LLM model to use
+      - PICOBOT_MODEL=${PICOBOT_MODEL:-google/gemini-2.5-flash}
+      # Optional: Telegram bot token from @BotFather
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      # Optional: Comma-separated Telegram user IDs allowed to chat
+      - TELEGRAM_ALLOW_FROM=${TELEGRAM_ALLOW_FROM:-}
+    volumes:
+      # Persist config, workspace, memory, and skills across restarts
+      - ./picobot-data:/home/picobot/.picobot

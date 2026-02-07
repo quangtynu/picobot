@@ -1,0 +1,33 @@
+# Binaries
+/picobot
+*.exe
+
+# Go build
+/bin/
+/pkg/
+
+# Docker env (contains secrets)
+docker/.env
+
+# Session data
+sessions/
+internal/agent/sessions/
+
+# Memory data
+memory/
+internal/agent/memory/memory
+internal/agent/memory/*.md
+
+# Runtime data
+picobot-data/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

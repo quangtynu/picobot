@@ -1,0 +1,378 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/spf13/cobra"
+
+	"path/filepath"
+	"strings"
+
+	"log"
+
+	"github.com/local/picobot/internal/agent"
+	"github.com/local/picobot/internal/agent/memory"
+	bus_pkg "github.com/local/picobot/internal/bus"
+	"github.com/local/picobot/internal/channels"
+	"github.com/local/picobot/internal/config"
+	"github.com/local/picobot/internal/cron"
+	"github.com/local/picobot/internal/heartbeat"
+	"github.com/local/picobot/internal/providers"
+)
+
+const version = "0.1.0"
+
+func NewRootCmd() *cobra.Command {
+	rootCmd := &cobra.Command{
+		Use:   "picobot",
+		Short: "picobot — lightweight clawbot in Go",
+	}
+
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "version",
+		Short: "Print version",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("🤖 picobot v%s\n", version)
+		},
+	})
+
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "onboard",
+		Short: "Create default config and workspace",
+		Run: func(cmd *cobra.Command, args []string) {
+			cfgPath, workspacePath, err := config.Onboard()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "onboard failed: %v\n", err)
+				return
+			}
+			fmt.Printf("Wrote config to %s\nInitialized workspace at %s\n", cfgPath, workspacePath)
+		},
+	})
+
+	agentCmd := &cobra.Command{
+		Use:   "agent",
+		Short: "Run a single-shot agent query (use -m)",
+		Run: func(cmd *cobra.Command, args []string) {
+			msg, _ := cmd.Flags().GetString("message")
+			modelFlag, _ := cmd.Flags().GetString("model")
+			if msg == "" {
+				fmt.Println("Specify a message with -m \"your message\"")
+				return
+			}
+
+			bus := bus_pkg.NewMessageBus(100)
+			cfg, _ := config.LoadConfig()
+			var provider providers.LLMProvider
+			if cfg.Providers.OpenRouter != nil && cfg.Providers.OpenRouter.APIKey != "" {
+				provider = providers.NewOpenRouterProvider(cfg.Providers.OpenRouter.APIKey, cfg.Providers.OpenRouter.APIBase)
+			} else if cfg.Providers.Ollama != nil && cfg.Providers.Ollama.APIBase != "" {
+				provider = providers.NewOllamaProvider(cfg.Providers.Ollama.APIBase)
+			} else {
+				provider = providers.NewStubProvider()
+			}
+
+			// choose model: flag > config default > provider default
+			model := modelFlag
+			if model == "" && cfg.Agents.Defaults.Model != "" {
+				model = cfg.Agents.Defaults.Model
+			}
+			if model == "" {
+				model = provider.GetDefaultModel()
+			}
+
+			ag := agent.NewAgentLoop(bus, provider, model, 5, cfg.Agents.Defaults.Workspace, nil)
+
+			resp, err := ag.ProcessDirect(msg, 60*time.Second)
+			if err != nil {
+				fmt.Fprintln(cmd.ErrOrStderr(), "error:", err)
+				return
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), resp)
+		},
+	}
+	agentCmd.Flags().StringP("message", "m", "", "Message to send to the agent")
+	agentCmd.Flags().StringP("model", "M", "", "Model to use (overrides config/provider default)")
+	rootCmd.AddCommand(agentCmd)
+
+	gatewayCmd := &cobra.Command{
+		Use:   "gateway",
+		Short: "Start long-running gateway (agent, telegram, heartbeat)",
+		Run: func(cmd *cobra.Command, args []string) {
+			bus := bus_pkg.NewMessageBus(200)
+			cfg, _ := config.LoadConfig()
+			provider := providers.NewProviderFromConfig(cfg)
+
+			// choose model: flag > config > provider default
+			modelFlag, _ := cmd.Flags().GetString("model")
+			model := modelFlag
+			if model == "" && cfg.Agents.Defaults.Model != "" {
+				model = cfg.Agents.Defaults.Model
+			}
+			if model == "" {
+				model = provider.GetDefaultModel()
+			}
+
+			// create scheduler with fire callback that delivers directly to user
+			scheduler := cron.NewScheduler(func(job cron.Job) {
+				log.Printf("cron fired: %s — %s", job.Name, job.Message)
+				bus.Outbound <- bus_pkg.OutboundMessage{
+					Channel: job.Channel,
+					ChatID:  job.ChatID,
+					Content: fmt.Sprintf("⏰ Reminder: %s", job.Message),
+				}
+			})
+
+			ag := agent.NewAgentLoop(bus, provider, model, 20, cfg.Agents.Defaults.Workspace, scheduler)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			// start agent loop
+			go ag.Run(ctx)
+
+			// start cron scheduler
+			go scheduler.Start(ctx.Done())
+
+			// start heartbeat
+			hbInterval := time.Duration(cfg.Agents.Defaults.HeartbeatIntervalS) * time.Second
+			if hbInterval <= 0 {
+				hbInterval = 60 * time.Second
+			}
+			heartbeat.StartHeartbeat(ctx, cfg.Agents.Defaults.Workspace, hbInterval, bus)
+
+			// start telegram if enabled
+			if cfg.Channels.Telegram.Enabled {
+				if err := channels.StartTelegram(ctx, bus, cfg.Channels.Telegram.Token); err != nil {
+					fmt.Fprintf(os.Stderr, "failed to start telegram: %v\n", err)
+				}
+			}
+
+			// wait for signal
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+			<-sigCh
+			fmt.Println("shutting down gateway")
+			cancel()
+		},
+	}
+	gatewayCmd.Flags().StringP("model", "M", "", "Model to use (overrides config/provider default)")
+	rootCmd.AddCommand(gatewayCmd)
+
+	// memory subcommands: read, append, write, recent
+	memoryCmd := &cobra.Command{
+		Use:   "memory",
+		Short: "Inspect or modify workspace memory files",
+	}
+
+	readCmd := &cobra.Command{
+		Use:   "read [today|long]",
+		Short: "Read memory (today or long-term)",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			target := args[0]
+			cfg, _ := config.LoadConfig()
+			ws := cfg.Agents.Defaults.Workspace
+			if ws == "" {
+				ws = "~/.picobot/workspace"
+			}
+			home, _ := os.UserHomeDir()
+			if strings.HasPrefix(ws, "~/") {
+				ws = filepath.Join(home, ws[2:])
+			}
+			mem := memory.NewMemoryStoreWithWorkspace(ws, 100)
+			switch target {
+			case "today":
+				out, _ := mem.ReadToday()
+				fmt.Fprintln(cmd.OutOrStdout(), out)
+			case "long":
+				out, _ := mem.ReadLongTerm()
+				fmt.Fprintln(cmd.OutOrStdout(), out)
+			default:
+				fmt.Fprintln(cmd.ErrOrStderr(), "unknown target: "+target)
+			}
+		},
+	}
+
+	appendCmd := &cobra.Command{
+		Use:   "append [today|long] -c <content>",
+		Short: "Append content to today's note or long-term memory",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			target := args[0]
+			content, _ := cmd.Flags().GetString("content")
+			if content == "" {
+				fmt.Fprintln(cmd.ErrOrStderr(), "-c content required")
+				return
+			}
+			cfg, _ := config.LoadConfig()
+			ws := cfg.Agents.Defaults.Workspace
+			if ws == "" {
+				ws = "~/.picobot/workspace"
+			}
+			home, _ := os.UserHomeDir()
+			if strings.HasPrefix(ws, "~/") {
+				ws = filepath.Join(home, ws[2:])
+			}
+			mem := memory.NewMemoryStoreWithWorkspace(ws, 100)
+			switch target {
+			case "today":
+				if err := mem.AppendToday(content); err != nil {
+					fmt.Fprintln(cmd.ErrOrStderr(), "append failed:", err)
+					return
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), "appended to today")
+			case "long":
+				lt, err := mem.ReadLongTerm()
+				if err != nil {
+					fmt.Fprintln(cmd.ErrOrStderr(), "append long failed:", err)
+					return
+				}
+				if err := mem.WriteLongTerm(lt + "\n" + content); err != nil {
+					fmt.Fprintln(cmd.ErrOrStderr(), "append long failed:", err)
+					return
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), "appended to long-term memory")
+			default:
+				fmt.Fprintln(cmd.ErrOrStderr(), "unknown target:", target)
+			}
+		},
+	}
+	appendCmd.Flags().StringP("content", "c", "", "Content to append")
+
+	writeCmd := &cobra.Command{
+		Use:   "write long -c <content>",
+		Short: "Write (overwrite) long-term MEMORY.md",
+		Args:  cobra.ExactArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			if args[0] != "long" {
+				fmt.Fprintln(os.Stderr, "write currently only supports 'long'")
+				return
+			}
+			content, _ := cmd.Flags().GetString("content")
+			if content == "" {
+				fmt.Fprintln(cmd.ErrOrStderr(), "-c content required")
+				return
+			}
+			cfg, _ := config.LoadConfig()
+			ws := cfg.Agents.Defaults.Workspace
+			if ws == "" {
+				ws = "~/.picobot/workspace"
+			}
+			home, _ := os.UserHomeDir()
+			if strings.HasPrefix(ws, "~/") {
+				ws = filepath.Join(home, ws[2:])
+			}
+			mem := memory.NewMemoryStoreWithWorkspace(ws, 100)
+			if err := mem.WriteLongTerm(content); err != nil {
+				fmt.Fprintln(cmd.ErrOrStderr(), "write failed:", err)
+				return
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "wrote long-term memory")
+		},
+	}
+	writeCmd.Flags().StringP("content", "c", "", "Content to write")
+
+	recentCmd := &cobra.Command{
+		Use:   "recent -days N",
+		Short: "Show recent N days' notes",
+		Run: func(cmd *cobra.Command, args []string) {
+			days, _ := cmd.Flags().GetInt("days")
+			cfg, _ := config.LoadConfig()
+			ws := cfg.Agents.Defaults.Workspace
+			if ws == "" {
+				ws = "~/.picobot/workspace"
+			}
+			home, _ := os.UserHomeDir()
+			if strings.HasPrefix(ws, "~/") {
+				ws = filepath.Join(home, ws[2:])
+			}
+			mem := memory.NewMemoryStoreWithWorkspace(ws, 100)
+			out, _ := mem.GetRecentMemories(days)
+			fmt.Fprintln(cmd.OutOrStdout(), out)
+		},
+	}
+	recentCmd.Flags().IntP("days", "d", 1, "Number of days to include")
+
+	memoryCmd.AddCommand(readCmd)
+	memoryCmd.AddCommand(appendCmd)
+	memoryCmd.AddCommand(writeCmd)
+	memoryCmd.AddCommand(recentCmd)
+
+	// rank subcommand: rank recent memories by relevance to a query
+	rankCmd := &cobra.Command{
+		Use:   "rank -q <query>",
+		Short: "Rank recent memories relative to a query",
+		Run: func(cmd *cobra.Command, args []string) {
+			q, _ := cmd.Flags().GetString("query")
+			if q == "" {
+				fmt.Fprintln(cmd.ErrOrStderr(), "-q query required")
+				return
+			}
+			top, _ := cmd.Flags().GetInt("top")
+			verbose, _ := cmd.Flags().GetBool("verbose")
+			cfg, _ := config.LoadConfig()
+			ws := cfg.Agents.Defaults.Workspace
+			if ws == "" {
+				ws = "~/.picobot/workspace"
+			}
+			home, _ := os.UserHomeDir()
+			if strings.HasPrefix(ws, "~/") {
+				ws = filepath.Join(home, ws[2:])
+			}
+			mem := memory.NewMemoryStoreWithWorkspace(ws, 100)
+			// Build memory items from today's file (split into lines) and long-term memory
+			items := make([]memory.MemoryItem, 0)
+			if td, err := mem.ReadToday(); err == nil && td != "" {
+				for _, line := range strings.Split(td, "\n") {
+					line = strings.TrimSpace(line)
+					if line == "" {
+						continue
+					}
+					// strip leading timestamp [2026-02-07...] if present
+					if idx := strings.Index(line, "] "); idx != -1 && strings.HasPrefix(line, "[") {
+						line = strings.TrimSpace(line[idx+2:])
+					}
+					items = append(items, memory.MemoryItem{Kind: "today", Text: line})
+				}
+			}
+			if lt, err := mem.ReadLongTerm(); err == nil && lt != "" {
+				for _, line := range strings.Split(lt, "\n") {
+					line = strings.TrimSpace(line)
+					if line == "" {
+						continue
+					}
+					items = append(items, memory.MemoryItem{Kind: "long", Text: line})
+				}
+			}
+			provider := providers.NewProviderFromConfig(cfg)
+			var logger *log.Logger
+			if verbose {
+				logger = log.New(cmd.OutOrStdout(), "ranker: ", 0)
+			}
+			ranker := memory.NewLLMRankerWithLogger(provider, provider.GetDefaultModel(), logger)
+			res := ranker.Rank(q, items, top)
+			for i, m := range res {
+				fmt.Fprintf(cmd.OutOrStdout(), "%d: %s (%s)\n", i+1, m.Text, m.Kind)
+			}
+		},
+	}
+	rankCmd.Flags().StringP("query", "q", "", "Query to rank memories against")
+	rankCmd.Flags().IntP("top", "k", 5, "Number of top memories to show")
+	rankCmd.Flags().BoolP("verbose", "v", false, "Enable verbose diagnostic logging (to stdout)")
+	memoryCmd.AddCommand(rankCmd)
+
+	rootCmd.AddCommand(memoryCmd)
+	return rootCmd
+}
+
+func main() {
+	rootCmd := NewRootCmd()
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
