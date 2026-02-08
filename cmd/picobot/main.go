@@ -117,13 +117,14 @@ func NewRootCmd() *cobra.Command {
 				model = provider.GetDefaultModel()
 			}
 
-			// create scheduler with fire callback that delivers directly to user
+			// create scheduler with fire callback that routes back through the agent loop, so the LLM can process the reminder and respond naturally to the user.
 			scheduler := cron.NewScheduler(func(job cron.Job) {
 				log.Printf("cron fired: %s — %s", job.Name, job.Message)
-				bus.Outbound <- bus_pkg.OutboundMessage{
-					Channel: job.Channel,
-					ChatID:  job.ChatID,
-					Content: fmt.Sprintf("⏰ Reminder: %s", job.Message),
+				bus.Inbound <- bus_pkg.InboundMessage{
+					Channel:  job.Channel,
+					SenderID: "cron",
+					ChatID:   job.ChatID,
+					Content:  fmt.Sprintf("[Scheduled reminder fired] %s — Please relay this to the user in a friendly way.", job.Message),
 				}
 			})
 
