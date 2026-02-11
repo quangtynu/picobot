@@ -12,18 +12,18 @@ import (
 	"time"
 )
 
-// OpenRouterProvider calls an OpenAI-compatible API (OpenRouter or similar).
-type OpenRouterProvider struct {
+// OpenAIProvider calls an OpenAI-compatible API (OpenAI, OpenRouter, or similar).
+type OpenAIProvider struct {
 	APIKey  string
-	APIBase string // e.g. https://openrouter.ai/api/v1 or http://localhost:11434/v1
+	APIBase string // e.g. https://api.openai.com/v1 or https://openrouter.ai/api/v1
 	Client  *http.Client
 }
 
-func NewOpenRouterProvider(apiKey, apiBase string) *OpenRouterProvider {
+func NewOpenAIProvider(apiKey, apiBase string) *OpenAIProvider {
 	if apiBase == "" {
 		apiBase = "https://api.openai.com/v1" // sensible default; can be overridden
 	}
-	return &OpenRouterProvider{
+	return &OpenAIProvider{
 		APIKey:  apiKey,
 		APIBase: strings.TrimRight(apiBase, "/"),
 		Client: &http.Client{
@@ -32,7 +32,7 @@ func NewOpenRouterProvider(apiKey, apiBase string) *OpenRouterProvider {
 	}
 }
 
-func (p *OpenRouterProvider) GetDefaultModel() string { return "gpt-4o-mini" }
+func (p *OpenAIProvider) GetDefaultModel() string { return "gpt-4o-mini" }
 
 // Request/response shapes using the modern OpenAI "tools" format.
 type chatRequest struct {
@@ -84,9 +84,9 @@ type chatResponse struct {
 }
 
 // Chat calls an OpenAI-compatible chat completion endpoint and returns a simplified response.
-func (p *OpenRouterProvider) Chat(ctx context.Context, messages []Message, tools []ToolDefinition, model string) (LLMResponse, error) {
+func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []ToolDefinition, model string) (LLMResponse, error) {
 	if p.APIKey == "" {
-		return LLMResponse{}, errors.New("OpenRouter provider: API key is not configured")
+		return LLMResponse{}, errors.New("OpenAI provider: API key is not configured")
 	}
 	if model == "" {
 		model = p.GetDefaultModel()
@@ -152,11 +152,11 @@ func (p *OpenRouterProvider) Chat(ctx context.Context, messages []Message, tools
 		// attempt to read response body for more details (do not expose API key)
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		body := strings.TrimSpace(string(bodyBytes))
-		log.Printf("OpenRouter API non-2xx: %s body=%q", resp.Status, body)
+		log.Printf("OpenAI API non-2xx: %s body=%q", resp.Status, body)
 		if body == "" {
-			return LLMResponse{}, fmt.Errorf("OpenRouter API error: %s", resp.Status)
+			return LLMResponse{}, fmt.Errorf("OpenAI API error: %s", resp.Status)
 		}
-		return LLMResponse{}, fmt.Errorf("OpenRouter API error: %s - %s", resp.Status, body)
+		return LLMResponse{}, fmt.Errorf("OpenAI API error: %s - %s", resp.Status, body)
 	}
 
 	var out chatResponse
@@ -165,7 +165,7 @@ func (p *OpenRouterProvider) Chat(ctx context.Context, messages []Message, tools
 	}
 
 	if len(out.Choices) == 0 {
-		return LLMResponse{}, errors.New("OpenRouter API returned no choices")
+		return LLMResponse{}, errors.New("OpenAI API returned no choices")
 	}
 
 	msg := out.Choices[0].Message

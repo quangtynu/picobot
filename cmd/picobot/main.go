@@ -68,10 +68,8 @@ func NewRootCmd() *cobra.Command {
 			hub := chat.NewHub(100)
 			cfg, _ := config.LoadConfig()
 			var provider providers.LLMProvider
-			if cfg.Providers.OpenRouter != nil && cfg.Providers.OpenRouter.APIKey != "" {
-				provider = providers.NewOpenRouterProvider(cfg.Providers.OpenRouter.APIKey, cfg.Providers.OpenRouter.APIBase)
-			} else if cfg.Providers.Ollama != nil && cfg.Providers.Ollama.APIBase != "" {
-				provider = providers.NewOllamaProvider(cfg.Providers.Ollama.APIBase)
+			if cfg.Providers.OpenAI != nil && cfg.Providers.OpenAI.APIKey != "" {
+				provider = providers.NewOpenAIProvider(cfg.Providers.OpenAI.APIKey, cfg.Providers.OpenAI.APIBase)
 			} else {
 				provider = providers.NewStubProvider()
 			}

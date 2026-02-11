@@ -15,11 +15,19 @@ if [ ! -f "${PICOBOT_HOME}/config.json" ]; then
 fi
 
 # Allow overriding config values via environment variables
-if [ -n "${OPENROUTER_API_KEY}" ]; then
-  echo "Applying OPENROUTER_API_KEY from environment..."
+if [ -n "${OPENAI_API_KEY}" ]; then
+  echo "Applying OPENAI_API_KEY from environment..."
   TMP=$(mktemp)
   cat "${PICOBOT_HOME}/config.json" | \
-    sed "s|sk-or-v1-REPLACE_ME|${OPENROUTER_API_KEY}|g" > "$TMP" && \
+    sed "s|sk-or-v1-REPLACE_ME|${OPENAI_API_KEY}|g" > "$TMP" && \
+    mv "$TMP" "${PICOBOT_HOME}/config.json"
+fi
+
+if [ -n "${OPENAI_API_BASE}" ]; then
+  echo "Applying OPENAI_API_BASE from environment..."
+  TMP=$(mktemp)
+  cat "${PICOBOT_HOME}/config.json" | \
+    sed "s|https://openrouter.ai/api/v1|${OPENAI_API_BASE}|g" > "$TMP" && \
     mv "$TMP" "${PICOBOT_HOME}/config.json"
 fi
 

@@ -3,7 +3,10 @@
 ## Prerequisites
 
 - **Go 1.21+** installed ([download](https://go.dev/dl/))
-- An **OpenRouter API key** ([get one here](https://openrouter.ai/keys))
+- An **API key** for an OpenAI-compatible service:
+  - [OpenRouter](https://openrouter.ai/keys) (recommended, supports many models)
+  - [OpenAI](https://platform.openai.com/api-keys)
+  - Or use a local [Ollama](https://ollama.ai) instance (no key needed)
 
 ## Step 1: Build
 
@@ -41,9 +44,9 @@ Edit `~/.picobot/config.json` and replace the placeholder API key:
 nano ~/.picobot/config.json
 ```
 
-Change `"sk-or-v1-REPLACE_ME"` to your actual OpenRouter API key.
+Change `"sk-or-v1-REPLACE_ME"` to your actual API key.
 
-Also set your preferred model (e.g., `google/gemini-2.5-flash`):
+Also set your preferred model (e.g., `google/gemini-2.5-flash` for OpenRouter, `gpt-4o-mini` for OpenAI):
 
 ```json
 {
@@ -53,7 +56,7 @@ Also set your preferred model (e.g., `google/gemini-2.5-flash`):
     }
   },
   "providers": {
-    "openrouter": {
+    "openai": {
       "apiKey": "sk-or-v1-YOUR_ACTUAL_KEY",
       "apiBase": "https://openrouter.ai/api/v1"
     }

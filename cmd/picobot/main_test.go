@@ -130,10 +130,10 @@ func TestAgentCLI_ModelFlag(t *testing.T) {
 	if _, _, err := config.Onboard(); err != nil {
 		t.Fatalf("onboard failed: %v", err)
 	}
-	// remove OpenRouter from config so stub provider is used
+	// remove OpenAI from config so stub provider is used
 	cfgPath, _, _ := config.ResolveDefaultPaths()
 	cfg2, _ := config.LoadConfig()
-	cfg2.Providers.OpenRouter = nil
+	cfg2.Providers.OpenAI = nil
 	_ = config.SaveConfig(cfg2, cfgPath)
 
 	cmd := NewRootCmd()

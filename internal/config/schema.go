@@ -31,8 +31,7 @@ type TelegramConfig struct {
 }
 
 type ProvidersConfig struct {
-	OpenRouter *ProviderConfig `json:"openrouter,omitempty"`
-	Ollama     *ProviderConfig `json:"ollama,omitempty"`
+	OpenAI *ProviderConfig `json:"openai,omitempty"`
 }
 
 type ProviderConfig struct {

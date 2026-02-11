@@ -36,7 +36,8 @@ Picobot runs happily on a **$5/mo VPS**, a Raspberry Pi, or even an old Android 
 
 ```sh
 docker run -d --name picobot \
-  -e OPENROUTER_API_KEY="your-key" \
+  -e OPENAI_API_KEY="your-key" \
+  -e OPENAI_API_BASE="https://openrouter.ai/api/v1" \
   -e PICOBOT_MODEL="google/gemini-2.5-flash" \
   -e TELEGRAM_BOT_TOKEN="your-telegram-token" \
   -v ./picobot-data:/home/picobot/.picobot \
@@ -57,7 +58,8 @@ services:
     container_name: picobot
     restart: unless-stopped
     environment:
-      - OPENROUTER_API_KEY=your-key
+      - OPENAI_API_KEY=your-key
+      - OPENAI_API_BASE=https://openrouter.ai/api/v1
       - PICOBOT_MODEL=google/gemini-2.5-flash
       - TELEGRAM_BOT_TOKEN=your-telegram-token
       - TELEGRAM_ALLOW_FROM=your-user-id
@@ -82,7 +84,7 @@ go build -o picobot ./cmd/picobot
 
 ## Architecture
 
-Actually the logic is simple and straightforward. Messages flow through a **Chat Hub** (inbound/outbound channels) into the **Agent Loop**, which builds context from memory/sessions/skills, calls the LLM (OpenRouter or Ollama), and executes tools (filesystem, exec, web, etc.) before sending replies back through the hub.
+Actually the logic is simple and straightforward. Messages flow through a **Chat Hub** (inbound/outbound channels) into the **Agent Loop**, which builds context from memory/sessions/skills, calls the LLM via OpenAI-compatible API, and executes tools (filesystem, exec, web, etc.) before sending replies back through the hub.
 
 <p>
   <img src="how-it-works.png" alt="How Picobot Works" width="600">
@@ -163,7 +165,7 @@ Picobot uses a single JSON config at `~/.picobot/config.json`:
     }
   },
   "providers": {
-    "openrouter": {
+    "openai": {
       "apiKey": "sk-or-v1-YOUR_KEY",
       "apiBase": "https://openrouter.ai/api/v1"
     }
@@ -178,7 +180,7 @@ Picobot uses a single JSON config at `~/.picobot/config.json`:
 }
 ```
 
-Supports **OpenRouter** and **Ollama** . See [CONFIG.md](CONFIG.md) for more details.
+Supports any **OpenAI-compatible API** (OpenAI, OpenRouter, Ollama, etc.). See [CONFIG.md](CONFIG.md) for more details.
 
 ## CLI Reference
 
@@ -215,7 +217,7 @@ Works on any Linux with 256MB RAM. No runtime dependencies. Just copy the binary
 |-------|------------|
 | Language | [Go](https://go.dev/) 1.25+ |
 | CLI framework | [Cobra](https://github.com/spf13/cobra) |
-| LLM providers | OpenRouter (cloud), Ollama (local) — via OpenAI-compatible API |
+| LLM providers | OpenAI-compatible API (OpenAI, OpenRouter, Ollama, etc.) |
 | Telegram | Raw Bot API (no third-party SDK, standard library `net/http`) |
 | HTTP / JSON | Go standard library only (`net/http`, `encoding/json`) |
 | Container | Alpine Linux 3.20 (multi-stage Docker build) |
@@ -235,7 +237,7 @@ internal/
   cron/               Cron scheduler
   heartbeat/          Periodic task checker
   memory/             Memory read/write/rank
-  providers/          OpenRouter, Ollama, Stub
+  providers/          OpenAI-compatible provider
   session/            Session manager
 docker/               Dockerfile, compose, entrypoint
 ```

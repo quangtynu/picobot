@@ -24,7 +24,7 @@ Picobot is configured via `~/.picobot/config.json`. Run `picobot onboard` to gen
     }
   },
   "providers": {
-    "openrouter": {
+    "openai": {
       "apiKey": "sk-or-v1-REPLACE_ME",
       "apiBase": "https://openrouter.ai/api/v1"
     }
@@ -75,21 +75,21 @@ The model is resolved in this order:
 
 ## providers
 
-LLM provider configuration. Picobot supports two providers. The first one with a valid config is used.
+LLM provider configuration. Picobot uses an OpenAI-compatible API provider.
 
-### providers.openrouter
+### providers.openai
 
-Connect to [OpenRouter](https://openrouter.ai) (cloud).
+Connect to any OpenAI-compatible API service (OpenAI, OpenRouter, Ollama, etc.).
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `apiKey` | string | *(required)* | Your OpenRouter API key. Get one at https://openrouter.ai/keys |
-| `apiBase` | string | `https://openrouter.ai/api/v1` | API base URL. Change if using a proxy or compatible endpoint. |
+| `apiKey` | string | *(required)* | Your API key. Get OpenRouter keys at https://openrouter.ai/keys |
+| `apiBase` | string | `https://openrouter.ai/api/v1` | API base URL. Use `https://api.openai.com/v1` for OpenAI, `http://localhost:11434/v1` for local Ollama, or any compatible endpoint. |
 
 ```json
 {
   "providers": {
-    "openrouter": {
+    "openai": {
       "apiKey": "sk-or-v1-your-key-here",
       "apiBase": "https://openrouter.ai/api/v1"
     }
@@ -97,44 +97,33 @@ Connect to [OpenRouter](https://openrouter.ai) (cloud).
 }
 ```
 
-### providers.ollama
-
-Connect to a local [Ollama](https://ollama.ai) instance (self-hosted).
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `apiKey` | string | *(not needed)* | Not required for local Ollama. |
-| `apiBase` | string | `http://localhost:11434/v1` | URL of your Ollama instance. |
+**Examples:**
 
 ```json
+// OpenAI
 {
   "providers": {
-    "ollama": {
-      "apiKey": "",
+    "openai": {
+      "apiKey": "sk-proj-...",
+      "apiBase": "https://api.openai.com/v1"
+    }
+  }
+}
+
+// Local Ollama (no API key needed)
+{
+  "providers": {
+    "openai": {
+      "apiKey": "not-needed",
       "apiBase": "http://localhost:11434/v1"
     }
   }
 }
 ```
 
-### Provider Selection
+### Provider Fallback
 
-Picobot selects the provider in this order:
-1. **OpenRouter** — if `openrouter.apiKey` is set and non-empty
-2. **Ollama** — if `ollama.apiBase` is set and non-empty
-3. **Stub** — fallback (echoes back your message, for testing)
-
-To switch providers, remove or clear the one you don't want:
-
-```json
-{
-  "providers": {
-    "ollama": {
-      "apiBase": "http://localhost:11434/v1"
-    }
-  }
-}
-```
+If no valid provider is configured, Picobot uses a **Stub** provider (echoes back your message, for testing).
 
 ---
 
@@ -203,7 +192,7 @@ The workspace directory (default `~/.picobot/workspace`) contains files that sha
     }
   },
   "providers": {
-    "openrouter": {
+    "openai": {
       "apiKey": "sk-or-v1-YOUR_KEY",
       "apiBase": "https://openrouter.ai/api/v1"
     }

@@ -22,7 +22,7 @@ internal/
   cron/               Cron scheduler
   heartbeat/          Periodic task checker
   memory/             Memory read/write/rank
-  providers/          OpenRouter, Ollama, Stub
+  providers/          OpenAI-compatible provider (OpenAI, OpenRouter, Ollama, etc.)
   session/            Session manager
 docker/               Dockerfile, compose, entrypoint
 ```
@@ -122,7 +122,8 @@ Spin up a container to make sure it works:
 
 ```sh
 docker run --rm -it \
-  -e OPENROUTER_API_KEY="your-key" \
+  -e OPENAI_API_KEY="your-key" \
+  -e OPENAI_API_BASE="https://openrouter.ai/api/v1" \
   -e PICOBOT_MODEL="google/gemini-2.5-flash" \
   -e TELEGRAM_BOT_TOKEN="your-token" \
   -v ./picobot-data:/home/picobot/.picobot \
@@ -153,7 +154,8 @@ These environment variables configure the Docker container:
 
 | Variable | Description | Required |
 |---|---|---|
-| `OPENROUTER_API_KEY` | OpenRouter API key | Yes |
+| `OPENAI_API_KEY` | OpenAI-compatible API key (OpenRouter, OpenAI, etc.) | Yes |
+| `OPENAI_API_BASE` | OpenAI-compatible API base URL | No |
 | `PICOBOT_MODEL` | LLM model to use (e.g. `google/gemini-2.5-flash`) | No |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot API token | Yes (for gateway) |
 | `TELEGRAM_ALLOW_FROM` | Comma-separated Telegram user IDs to allow | No |

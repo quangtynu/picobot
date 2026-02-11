@@ -60,14 +60,11 @@ func TestSaveAndLoadConfig(t *testing.T) {
 	if parsed.Agents.Defaults.Workspace != d {
 		t.Fatalf("workspace mismatch: got %s want %s", parsed.Agents.Defaults.Workspace, d)
 	}
-	// verify provider defaults: OpenRouter present, Ollama empty
-	if parsed.Providers.OpenRouter == nil || parsed.Providers.OpenRouter.APIKey != "sk-or-v1-REPLACE_ME" {
-		t.Fatalf("expected default OpenRouter API key placeholder, got %v", parsed.Providers.OpenRouter)
+	// verify provider defaults: OpenAI present with placeholder
+	if parsed.Providers.OpenAI == nil || parsed.Providers.OpenAI.APIKey != "sk-or-v1-REPLACE_ME" {
+		t.Fatalf("expected default OpenAI API key placeholder, got %v", parsed.Providers.OpenAI)
 	}
-	if parsed.Providers.OpenRouter.APIBase != "https://openrouter.ai/api/v1" {
-		t.Fatalf("expected default OpenRouter API base, got %q", parsed.Providers.OpenRouter.APIBase)
-	}
-	if parsed.Providers.Ollama != nil {
-		t.Fatalf("expected Ollama to be absent by default, got %v", parsed.Providers.Ollama)
+	if parsed.Providers.OpenAI.APIBase != "https://openrouter.ai/api/v1" {
+		t.Fatalf("expected default OpenAI API base, got %q", parsed.Providers.OpenAI.APIBase)
 	}
 }
