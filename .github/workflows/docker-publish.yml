@@ -19,7 +19,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
 
       - name: Run tests
         run: go test ./...
@@ -44,8 +44,8 @@ jobs:
         with:
           images: louisho5/picobot
           tags: |
-            type=raw,value=latest
             type=raw,value=${{ inputs.version_tag }},enable=${{ inputs.version_tag != '' }}
+            type=raw,value=latest
 
       - name: Build and push Docker image
         id: build
