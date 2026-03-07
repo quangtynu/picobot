@@ -10,15 +10,12 @@ linters:
   settings:
     errcheck:
       exclude-functions:
-        # Writing to stdout/stderr never produces actionable errors.
         - fmt.Print
         - fmt.Println
         - fmt.Printf
         - fmt.Fprint
         - fmt.Fprintln
         - fmt.Fprintf
-        # ResponseWriter.Write in HTTP handlers/test mocks is universally ignored.
         - (net/http.ResponseWriter).Write
-        # HTTP response body close and body drain are best-effort cleanup.
         - (io.ReadCloser).Close
         - io.ReadAll
