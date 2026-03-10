@@ -85,7 +85,7 @@ func (t *WebSearchTool) Execute(ctx context.Context, args map[string]interface{}
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("web_search: DuckDuckGo returned HTTP %d", resp.StatusCode)
 	}
 
