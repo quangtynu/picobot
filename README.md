@@ -290,6 +290,7 @@ docker/               Dockerfile, compose, entrypoint
 
 - [x] Add Telegram support
 - [x] Add Discord support
+- [x] Add Slack support
 - [x] Add WhatsApp support
 - [x] AI agent with skill creation capability
 - [ ] Integrate with MCP Servers
